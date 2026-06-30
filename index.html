@@ -703,6 +703,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
       <div class="board-sub" id="boardSub">MOHAMMED ENQUESHAF CHOWDHURY &middot; TRACKING ALL CHANNELS</div>
     </div>
     <div class="clock" id="clockDisplay">--:--:--</div>
+    <div class="sync-status" id="syncStatus" style="font-family:'SF Mono','Menlo','Courier New',monospace; font-size:10.5px; color:var(--text-dim); text-align:right; margin-top:4px; cursor:pointer;" title="Tap to change cloud sync settings">○ Local only</div>
   </div>
 
   <div class="stats-strip">
@@ -733,6 +734,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
   <button class="btn-ghost" id="btnExport">⬆ Export Data</button>
   <button class="btn-ghost" id="btnImport">⬇ Import Data</button>
   <input type="file" id="fileImport" accept="application/json" style="display:none;">
+  <button class="btn-ghost" id="btnRefreshCloud" title="Pull latest from GitHub now">↻ Refresh</button>
   <button class="btn-ghost" id="btnPdf">⬇ Download PDF</button>
 </div>
 
@@ -822,6 +824,39 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
 
 <div class="toast" id="toast"></div>
 
+<!-- GitHub Sync Setup Modal -->
+<div class="modal-overlay" id="setupOverlay">
+  <div class="modal">
+    <h2>Connect GitHub Sync</h2>
+    <p style="font-size:12.5px; color:var(--text-dim); line-height:1.6; margin:-8px 0 16px;">
+      This stores your data as a file inside your own GitHub repository — no third-party database. Every device that connects with these same details reads and writes the same file. You only need to do this once per device.
+    </p>
+    <div class="form-row">
+      <label>GitHub Username</label>
+      <input type="text" id="ghOwner" placeholder="e.g. bradc99">
+    </div>
+    <div class="form-row">
+      <label>Repository Name</label>
+      <input type="text" id="ghRepo" placeholder="e.g. JobTracker">
+    </div>
+    <div class="form-row">
+      <label>Branch</label>
+      <input type="text" id="ghBranch" placeholder="main" value="main">
+    </div>
+    <div class="form-row">
+      <label>Personal Access Token</label>
+      <input type="password" id="ghToken" placeholder="ghp_...">
+      <p style="font-size:11px; color:var(--text-dim); margin:6px 0 0; line-height:1.5;">
+        Generate at github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens. Grant it "Contents: Read and write" permission, scoped only to this repository. Stored only on this device, never sent anywhere except GitHub's API.
+      </p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="btnUseLocalOnly">Skip — use this device only</button>
+      <button type="button" class="btn-primary" id="btnSaveFbConfig">Connect</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const STORAGE_KEY = 'job-applications-v1';
 let applications = [];
@@ -875,7 +910,106 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'), 2200);
 }
 
+/* ---------- Cloud sync (GitHub repo file) with localStorage fallback ---------- */
+const GH_CONFIG_KEY = 'job-tracker-gh-config';
+const GH_DATA_PATH = 'data.json';
+let ghConfig = null;
+let ghFileSha = null;
+let cloudMode = false;
+let pollTimer = null;
+
+function getSavedGhConfig(){
+  try{
+    const raw = localStorage.getItem(GH_CONFIG_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+
+function ghApiUrl(cfg){
+  return `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${GH_DATA_PATH}`;
+}
+
+async function ghFetchFile(cfg){
+  const res = await fetch(ghApiUrl(cfg) + `?ref=${encodeURIComponent(cfg.branch)}&t=${Date.now()}`, {
+    headers: {
+      'Authorization': `Bearer ${cfg.token}`,
+      'Accept': 'application/vnd.github+json'
+    }
+  });
+  if(res.status === 404){
+    return null; // file doesn't exist yet
+  }
+  if(!res.ok){
+    throw new Error('GitHub fetch failed: ' + res.status);
+  }
+  const json = await res.json();
+  ghFileSha = json.sha;
+  const decoded = decodeURIComponent(escape(atob(json.content.replace(/\n/g,''))));
+  return JSON.parse(decoded);
+}
+
+async function ghWriteFile(cfg, dataArray, message){
+  const content = btoa(unescape(encodeURIComponent(JSON.stringify(dataArray, null, 2))));
+  const body = {
+    message: message || 'Update job tracker data',
+    content: content,
+    branch: cfg.branch
+  };
+  if(ghFileSha) body.sha = ghFileSha;
+  const res = await fetch(ghApiUrl(cfg), {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${cfg.token}`,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  if(!res.ok){
+    const errText = await res.text();
+    throw new Error('GitHub write failed: ' + res.status + ' ' + errText);
+  }
+  const json = await res.json();
+  ghFileSha = json.content.sha;
+}
+
+async function syncFromGithub(showFeedback){
+  try{
+    const remote = await ghFetchFile(ghConfig);
+    if(remote === null){
+      applications = SEED_DATA.map((d,i)=>({id:i+1, ...d}));
+      await ghWriteFile(ghConfig, applications, 'Seed job tracker data');
+    } else {
+      applications = remote.sort((a,b)=>a.id-b.id);
+    }
+    render();
+    if(showFeedback) showToast('✓ Synced from GitHub');
+  }catch(e){
+    console.error('GitHub sync error', e);
+    if(showFeedback) showToast('⚠ GitHub sync failed — check token/repo');
+  }
+}
+
+function startCloudPolling(){
+  const statusEl = document.getElementById('syncStatus');
+  if(statusEl){ statusEl.textContent = '● GitHub synced'; statusEl.style.color = 'var(--teal)'; }
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(()=>syncFromGithub(false), 20000); // poll every 20s for changes from other devices
+}
+
 async function loadData(){
+  const savedConfig = getSavedGhConfig();
+  if(savedConfig){
+    ghConfig = savedConfig;
+    cloudMode = true;
+    await syncFromGithub(false);
+    startCloudPolling();
+    document.getElementById('setupOverlay').classList.remove('open');
+    return;
+  } else {
+    document.getElementById('setupOverlay').classList.add('open');
+  }
+  // local fallback
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw){
@@ -890,11 +1024,61 @@ async function loadData(){
 }
 
 async function saveData(){
+  if(cloudMode){
+    try{
+      await ghWriteFile(ghConfig, applications);
+    }catch(e){
+      console.error('GitHub save failed', e);
+      showToast('⚠ Could not save to GitHub — saved locally instead');
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(applications));
+    }
+    return;
+  }
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify(applications));
   }catch(e){
     console.error('Storage save failed', e);
     showToast('⚠ Could not save — storage may be full');
+  }
+}
+
+/* ---------- Setup modal wiring ---------- */
+document.getElementById('btnSaveFbConfig').addEventListener('click', async ()=>{
+  const owner = document.getElementById('ghOwner').value.trim();
+  const repo = document.getElementById('ghRepo').value.trim();
+  const branch = document.getElementById('ghBranch').value.trim() || 'main';
+  const token = document.getElementById('ghToken').value.trim();
+  if(!owner || !repo || !token){ showToast('⚠ Fill in username, repo, and token'); return; }
+  const config = { owner, repo, branch, token };
+  try{
+    ghConfig = config;
+    cloudMode = true;
+    await syncFromGithub(false);
+    localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(config));
+    startCloudPolling();
+    document.getElementById('setupOverlay').classList.remove('open');
+    showToast('✓ Connected to GitHub');
+  }catch(e){
+    console.error(e);
+    cloudMode = false;
+    showToast('⚠ Could not connect — check your details');
+  }
+});
+
+document.getElementById('btnUseLocalOnly').addEventListener('click', ()=>{
+  document.getElementById('setupOverlay').classList.remove('open');
+  loadDataLocalOnly();
+});
+
+async function loadDataLocalOnly(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){ applications = JSON.parse(raw); render(); return; }
+    throw new Error('no data');
+  }catch(e){
+    applications = SEED_DATA.map((d,i)=>({id:i+1, ...d}));
+    await saveData();
+    render();
   }
 }
 
@@ -1064,12 +1248,15 @@ form.addEventListener('submit', async (e)=>{
     status: document.getElementById('fStatus').value,
     notes: document.getElementById('fNotes').value.trim()
   };
+  let finalEntry;
   if(editingId){
+    finalEntry = {id:editingId, ...entry};
     const idx = applications.findIndex(a=>a.id===editingId);
-    applications[idx] = {id:editingId, ...entry};
+    if(idx>-1) applications[idx] = finalEntry;
     showToast('✓ Entry updated');
   } else {
-    applications.push({id:nextId(), ...entry});
+    finalEntry = {id:nextId(), ...entry};
+    applications.push(finalEntry);
     showToast('✓ Application logged');
   }
   await saveData();
@@ -1230,7 +1417,26 @@ function generatePDF(){
 
 document.getElementById('btnPdf').addEventListener('click', generatePDF);
 
+document.getElementById('btnRefreshCloud').addEventListener('click', ()=>{
+  if(cloudMode){
+    syncFromGithub(true);
+  } else {
+    showToast('Not connected to GitHub — tap the sync label above to connect');
+  }
+});
+
 /* ---------- Init ---------- */
+document.getElementById('syncStatus').addEventListener('click', ()=>{
+  const existing = getSavedGhConfig();
+  if(existing){
+    document.getElementById('ghOwner').value = existing.owner || '';
+    document.getElementById('ghRepo').value = existing.repo || '';
+    document.getElementById('ghBranch').value = existing.branch || 'main';
+    document.getElementById('ghToken').value = existing.token || '';
+  }
+  document.getElementById('setupOverlay').classList.add('open');
+});
+
 (async function init(){
   await loadData();
   render();
