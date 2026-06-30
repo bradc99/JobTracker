@@ -833,11 +833,11 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
     </p>
     <div class="form-row">
       <label>GitHub Username</label>
-      <input type="text" id="ghOwner" placeholder="e.g. bradc99">
+      <input type="text" id="ghOwner" placeholder="e.g. bradc99" value="bradc99">
     </div>
     <div class="form-row">
       <label>Repository Name</label>
-      <input type="text" id="ghRepo" placeholder="e.g. JobTracker">
+      <input type="text" id="ghRepo" placeholder="e.g. JobTracker" value="JobTracker">
     </div>
     <div class="form-row">
       <label>Branch</label>
@@ -849,8 +849,12 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
       <p style="font-size:11px; color:var(--text-dim); margin:6px 0 0; line-height:1.5;">
         Generate at github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens. Grant it "Contents: Read and write" permission, scoped only to this repository. Stored only on this device, never sent anywhere except GitHub's API.
       </p>
+      <p style="font-size:11px; color:var(--amber); margin:8px 0 0; line-height:1.5;">
+        Tip: after pasting your token above, tap "Copy bookmark link" — it builds a link with the token built in. Save that as a bookmark on each device and it connects instantly with no popup. Keep that link private, since it grants write access to this repo.
+      </p>
     </div>
     <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="btnCopyBookmark">Copy bookmark link</button>
       <button type="button" class="btn-ghost" id="btnUseLocalOnly">Skip — use this device only</button>
       <button type="button" class="btn-primary" id="btnSaveFbConfig">Connect</button>
     </div>
@@ -997,7 +1001,35 @@ function startCloudPolling(){
   pollTimer = setInterval(()=>syncFromGithub(false), 20000); // poll every 20s for changes from other devices
 }
 
+/* ---------- Default repo details (pre-filled, only token is ever needed) ---------- */
+const GH_DEFAULTS = { owner: 'bradc99', repo: 'JobTracker', branch: 'main' };
+
+function getTokenFromUrl(){
+  const hash = window.location.hash; // e.g. #sync=ghp_xxxxx
+  const match = hash.match(/[#&]sync=([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 async function loadData(){
+  // 1. URL-based auto-connect (bookmarked link with token baked in)
+  const urlToken = getTokenFromUrl();
+  if(urlToken){
+    const config = { ...GH_DEFAULTS, token: urlToken };
+    try{
+      ghConfig = config;
+      cloudMode = true;
+      await syncFromGithub(false);
+      localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(config));
+      startCloudPolling();
+      document.getElementById('setupOverlay').classList.remove('open');
+      return;
+    }catch(e){
+      console.error('URL auto-connect failed', e);
+      cloudMode = false;
+      showToast('⚠ Bookmark link token invalid — connect manually');
+    }
+  }
+
   const savedConfig = getSavedGhConfig();
   if(savedConfig){
     ghConfig = savedConfig;
@@ -1422,6 +1454,23 @@ document.getElementById('btnRefreshCloud').addEventListener('click', ()=>{
     syncFromGithub(true);
   } else {
     showToast('Not connected to GitHub — tap the sync label above to connect');
+  }
+});
+
+document.getElementById('btnCopyBookmark').addEventListener('click', async ()=>{
+  const token = document.getElementById('ghToken').value.trim();
+  if(!token){ showToast('⚠ Paste your token first, then copy the link'); return; }
+  const baseUrl = window.location.origin + window.location.pathname;
+  const link = `${baseUrl}#sync=${encodeURIComponent(token)}`;
+  try{
+    await navigator.clipboard.writeText(link);
+    showToast('✓ Link copied — bookmark it on each device');
+  }catch(e){
+    // fallback for browsers blocking clipboard API
+    const ta = document.createElement('textarea');
+    ta.value = link; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('✓ Link copied — bookmark it on each device');
   }
 });
 
