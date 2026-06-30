@@ -237,8 +237,8 @@
     "timeApplied": "02:07",
     "url": "",
     "interviewScheduled": "",
-    "interviewAttended": "n/a",
-    "status": "applied",
+    "interviewAttended": "no",
+    "status": "notattended",
     "notes": ""
   },
   {
