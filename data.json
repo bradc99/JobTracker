@@ -271,7 +271,7 @@
     "url": "",
     "interviewScheduled": "",
     "interviewAttended": "n/a",
-    "status": "applied",
+    "status": "rejected",
     "notes": ""
   },
   {
@@ -279,7 +279,7 @@
     "position": "Associate Banker — Richmond",
     "dateApplied": "2026-06-15",
     "timeApplied": "13:27",
-    "url": "",
+    "url": "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/my-profile",
     "interviewScheduled": "",
     "interviewAttended": "n/a",
     "status": "applied",
@@ -293,7 +293,7 @@
     "url": "",
     "interviewScheduled": "",
     "interviewAttended": "n/a",
-    "status": "applied",
+    "status": "notattended",
     "notes": ""
   },
   {
@@ -303,8 +303,8 @@
     "timeApplied": "21:30",
     "url": "",
     "interviewScheduled": "",
-    "interviewAttended": "pending",
-    "status": "gotcall",
+    "interviewAttended": "yes",
+    "status": "gotjob",
     "notes": "Received a call back"
   },
   {
@@ -312,7 +312,7 @@
     "position": "YAI — DSP (Mohammed_Dsp)",
     "dateApplied": "2026-06-26",
     "timeApplied": "23:02",
-    "url": "",
+    "url": "https://yai.wd5.myworkdayjobs.com/en-US/Careers/login?redirect=%2Fen-US%2FCareers%2FuserHome",
     "interviewScheduled": "",
     "interviewAttended": "n/a",
     "status": "applied",
@@ -323,7 +323,29 @@
     "position": "QSAC — DSP",
     "dateApplied": "2026-06-27",
     "timeApplied": "01:27",
-    "url": "",
+    "url": "https://recruiting.ultipro.com/QSA1000QSAC/JobBoard/d1dee834-9977-44db-8afd-d97fd6e60e44/Candidate/ViewPresence",
+    "interviewScheduled": "",
+    "interviewAttended": "n/a",
+    "status": "applied",
+    "notes": ""
+  },
+  {
+    "id": 32,
+    "position": "YAI — DSP 1 (Mohammed_DSP)",
+    "dateApplied": "2026-06-27",
+    "timeApplied": "00:01",
+    "url": "https://yai.wd5.myworkdayjobs.com/en-US/Careers/login?redirect=%2Fen-US%2FCareers%2FuserHome",
+    "interviewScheduled": "",
+    "interviewAttended": "n/a",
+    "status": "applied",
+    "notes": ""
+  },
+  {
+    "id": 33,
+    "position": "Direct Support Professional I-71532906",
+    "dateApplied": "2026-06-30",
+    "timeApplied": "11:13",
+    "url": "https://recruiting.ultipro.com/INS1020ICLI/JobBoard/e9acfd27-fb5e-441c-8e5d-9f6746da7afc/Candidate/ViewPresence",
     "interviewScheduled": "",
     "interviewAttended": "n/a",
     "status": "applied",
